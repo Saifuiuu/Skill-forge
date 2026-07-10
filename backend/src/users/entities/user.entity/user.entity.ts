@@ -1,4 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Quiz } from 'src/quizzes/entities/quiz.entity';
+import { Team } from 'src/teams/entities/team.entity';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, OneToOne } from 'typeorm';
+
 
 export enum UserRole {
   EMPLOYEE = 'EMPLOYEE',
@@ -21,8 +24,12 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.EMPLOYEE })
   role: UserRole;
 
-  // Yahan Foreign Keys ayengi (TeamId, DepartmentId) jo hum next relation step me add karenge
+  // Har user (employee) ek team ka hissa hota hai
+  @ManyToOne(() => Team, (team) => team.members, { nullable: true, onDelete: 'SET NULL' })
+  team: Team;
 
+  @OneToOne(() =>Quiz, (quiz) => quiz.course)
+quiz: Quiz;
   @CreateDateColumn()
   createdAt: Date;
 }
