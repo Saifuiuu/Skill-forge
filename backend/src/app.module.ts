@@ -2,6 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { Certificate } from './certificates/entities/certificate.entity';
+import { CertificatesModule } from './certificates/certificates.module';
+
+
+
 import { Company } from './companies/entities/company.entity';
 import { Department } from './departments/entities/department.entity';
 import { Team } from './teams/entities/team.entity';
@@ -23,6 +29,8 @@ import { AuthModule } from './auth/auth.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
+
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -38,6 +46,7 @@ import { AppService } from './app.service';
         Course,
         Quiz,
         Question,
+        Certificate,
       ],
       synchronize: false,
       migrationsRun: true,
@@ -56,6 +65,7 @@ import { AppService } from './app.service';
     EnrolmentsModule,
     QuizzesModule,
     QuestionsModule,
+    CertificatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

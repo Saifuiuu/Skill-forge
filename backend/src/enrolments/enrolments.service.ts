@@ -10,7 +10,8 @@ import { Enrolment, EnrolmentStatus } from './entities/enrolment.entity';
 import { CoursesService } from '../courses/courses.service';
 import { EnrolmentsGateway } from './enrolments.gateway';
 import { User, UserRole } from '../users/entities/user.entity';
-
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CertificateIssuedEvent } from '../certificates/events/certificate-issued.event';
 @Injectable()
 export class EnrolmentsService {
   constructor(
@@ -18,6 +19,7 @@ export class EnrolmentsService {
     private readonly enrolmentsRepo: Repository<Enrolment>,
     private readonly coursesService: CoursesService,
     private readonly gateway: EnrolmentsGateway,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private async getCompletedCourseIds(employeeId: string): Promise<string[]> {
@@ -105,6 +107,20 @@ export class EnrolmentsService {
   enrolment.status = EnrolmentStatus.PASSED;
   enrolment.completedAt = new Date();
   const saved = await this.enrolmentsRepo.save(enrolment);
+
+
+this.eventEmitter.emit(
+  'certificate.issued',
+  new CertificateIssuedEvent(
+    saved.id,
+    enrolment.employee.id,
+    enrolment.employee.fullName,
+    enrolment.course.id,
+    enrolment.course.title,
+  ),
+);
+
+
 
   const manager = enrolment.employee.team?.members?.find(
     (m) => m.role === UserRole.MANAGER,
