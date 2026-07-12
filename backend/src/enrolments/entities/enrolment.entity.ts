@@ -34,6 +34,9 @@ export class Enrolment {
   @Column({ default: 0 })
   progressPercentage: number;
 
+  @Column({ default: 0 })
+  bonusAttempts: number;
+
   // Who caused this enrolment: the employee themself (self-enrol) or a manager (bulk-enrol)
   @ManyToOne(() => User, { nullable: true })
   enrolledBy: User | null;

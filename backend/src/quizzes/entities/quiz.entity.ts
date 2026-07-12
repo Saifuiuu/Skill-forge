@@ -13,6 +13,8 @@ export class Quiz {
   @Column({ default: 3 })
   maxAttempts: number;
 
+  @Column({ default: 30 })
+ timeLimitMinutes: number;
   // Ek course ka exactly ek quiz hoga
   @OneToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn()
