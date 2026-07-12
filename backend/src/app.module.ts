@@ -28,6 +28,7 @@ import { QuestionsModule } from './questions/questions.module';
 import { AuthModule } from './auth/auth.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ComplianceModule } from './compliance/compliance.module';
 
 
 
@@ -48,7 +49,7 @@ import { AppService } from './app.service';
         Question,
         Certificate,
       ],
-      synchronize: false,
+      synchronize: true,
       migrationsRun: true,
       migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
       ssl: true,
@@ -66,6 +67,7 @@ import { AppService } from './app.service';
     QuizzesModule,
     QuestionsModule,
     CertificatesModule,
+    ComplianceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
