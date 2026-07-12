@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn } from 'typeorm';
 import { Department } from '../../departments/entities/department.entity';
-import { User } from 'src/users/entities/user.entity/user.entity';
+import { User } from 'src/users/entities/user.entity';
+
 
 
 @Entity('teams')

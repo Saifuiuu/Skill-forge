@@ -1,14 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
-
+import { User } from '../../users/entities/user.entity';
 import { Course } from '../../courses/entities/course.entity';
-import { User } from 'src/users/entities/user.entity/user.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export enum EnrolmentStatus {
-  NOT_STARTED = 'Not Started',
-  IN_PROGRESS = 'In Progress',
-  PENDING_QUIZ = 'Pending Quiz',
-  PASSED = 'Passed',
-  FAILED = 'Failed',
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  PENDING_QUIZ = 'PENDING_QUIZ',
+  PASSED = 'PASSED',
+  FAILED = 'FAILED',
 }
 
 @Entity('enrolments')
@@ -16,17 +22,28 @@ export class Enrolment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @ManyToOne(() => User, { nullable: false })
+  employee: User;
+
+  @ManyToOne(() => Course, (course) => course.enrolments, { nullable: false })
+  course: Course;
+
   @Column({ type: 'enum', enum: EnrolmentStatus, default: EnrolmentStatus.NOT_STARTED })
   status: EnrolmentStatus;
 
-  // Kis user ki enrolment hai
-  @ManyToOne(() => User, (user) => user.id, { onDelete: 'CASCADE' })
-  user: User;
+  @Column({ default: 0 })
+  progressPercentage: number;
 
-  // Kis course me enrolment hai
-  @ManyToOne(() => Course, (course) => course.enrolments, { onDelete: 'CASCADE' })
-  course: Course;
+  // Who caused this enrolment: the employee themself (self-enrol) or a manager (bulk-enrol)
+  @ManyToOne(() => User, { nullable: true })
+  enrolledBy: User | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt: Date | null;
 
   @CreateDateColumn()
-  enrolledAt: Date;
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
