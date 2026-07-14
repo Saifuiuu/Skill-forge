@@ -3,9 +3,7 @@ import type { FormEvent } from 'react'
 import { recommendLearningPath } from '../../api/learningPath'
 
 export function LearningPathPage() {
-  const [careerGoal, setCareerGoal] = useState(
-    'Become a senior compliance officer within 18 months',
-  )
+  const [careerGoal, setCareerGoal] = useState('')
   const [role, setRole] = useState('')
   const [department, setDepartment] = useState('')
   const [result, setResult] = useState<Awaited<

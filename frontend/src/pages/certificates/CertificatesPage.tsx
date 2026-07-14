@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   downloadCertificate,
   getMyCertificates,
@@ -12,12 +12,14 @@ import {
 export function CertificatesPage() {
   const [certs, setCerts] = useState<Certificate[]>([])
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [code, setCode] = useState('')
 
   useEffect(() => {
     void getMyCertificates()
       .then(setCerts)
       .catch(() => setError('Could not load certificates.'))
+      .finally(() => setLoading(false))
   }, [])
 
   const onDownload = async (id: string, title: string) => {
@@ -41,6 +43,7 @@ export function CertificatesPage() {
         Earned completions and public verification codes.
       </p>
       {error && <p className="mt-3 text-sm text-alert">{error}</p>}
+      {loading && <p className="mt-6 text-ink-soft">Loading certificates…</p>}
 
       <ul className="mt-8 space-y-4">
         {certs.map((cert) => (
@@ -74,7 +77,7 @@ export function CertificatesPage() {
         ))}
       </ul>
 
-      {!certs.length && (
+      {!loading && !error && !certs.length && (
         <p className="mt-6 text-ink-soft">No certificates yet — pass a course quiz to earn one.</p>
       )}
 
@@ -103,7 +106,8 @@ export function CertificatesPage() {
 }
 
 export function VerifyCertificatePage() {
-  const code = window.location.pathname.split('/').pop() ?? ''
+  const { code: codeParam } = useParams<{ code: string }>()
+  const code = codeParam ?? ''
   const [result, setResult] = useState<VerifyResult | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)

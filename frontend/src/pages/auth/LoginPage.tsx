@@ -10,8 +10,8 @@ export function LoginPage() {
   const location = useLocation()
   const from = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? '/app'
 
-  const [email, setEmail] = useState('employee@nexara.com')
-  const [password, setPassword] = useState('DemoPass123!')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 

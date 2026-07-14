@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { listCourses } from '../../api/courses'
 import { analyzeSkillGap } from '../../api/skillGap'
+import { listTeams, type TeamSummary } from '../../api/teams'
 import { useAuthStore } from '../../store/authStore'
 import type { Course } from '../../types/course'
 
@@ -9,6 +10,8 @@ export function SkillGapPage() {
   const user = useAuthStore((s) => s.user)
   const hydrateProfile = useAuthStore((s) => s.hydrateProfile)
   const [courses, setCourses] = useState<Course[]>([])
+  const [teams, setTeams] = useState<TeamSummary[]>([])
+  const [teamId, setTeamId] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [frameworkName, setFrameworkName] = useState('Compliance track')
   const [result, setResult] = useState<Awaited<ReturnType<typeof analyzeSkillGap>> | null>(
@@ -17,16 +20,28 @@ export function SkillGapPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const isHr = user?.role === 'HR_ADMIN'
+
   useEffect(() => {
     void (async () => {
       try {
-        if (!user?.team?.id) await hydrateProfile()
+        if (!useAuthStore.getState().user?.team?.id) {
+          await hydrateProfile()
+        }
+        const profile = useAuthStore.getState().user
         setCourses(await listCourses())
+        if (profile?.role === 'HR_ADMIN') {
+          const all = await listTeams()
+          setTeams(all)
+          setTeamId((prev) => prev || profile.team?.id || all[0]?.id || '')
+        } else {
+          setTeamId(profile?.team?.id ?? '')
+        }
       } catch {
-        setError('Could not load courses.')
+        setError('Could not load skill-gap inputs.')
       }
     })()
-  }, [user?.team?.id, hydrateProfile])
+  }, [hydrateProfile, user?.role, user?.team?.id])
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -39,9 +54,8 @@ export function SkillGapPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const teamId = useAuthStore.getState().user?.team?.id
     if (!teamId) {
-      setError('Your profile has no team assigned.')
+      setError('Select a team to analyse.')
       return
     }
     if (!selected.size) {
@@ -71,10 +85,35 @@ export function SkillGapPage() {
     <section className="fade-rise max-w-3xl">
       <h1 className="font-display text-3xl text-ink">Skill gap analyser</h1>
       <p className="mt-1 text-ink-soft">
-        Pick a competency framework (required courses) against your team.
+        Pick a competency framework (required courses) against a team.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
+        {isHr ? (
+          <label className="block text-sm font-medium">
+            Team
+            <select
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-2"
+              required
+            >
+              <option value="">Select team…</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.department ? ` (${t.department.name})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            Analysing team:{' '}
+            <span className="font-medium text-ink">{user?.team?.name ?? 'not assigned'}</span>
+          </p>
+        )}
+
         <label className="block text-sm font-medium">
           Framework name
           <input

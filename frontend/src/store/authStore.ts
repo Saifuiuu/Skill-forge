@@ -74,8 +74,12 @@ export const useAuthStore = create<AuthState>()(
 
       hydrateProfile: async () => {
         if (!get().accessToken) return
-        const { data } = await api.get<AuthUser>('/auth/profile')
-        set({ user: data, isAuthenticated: true })
+        try {
+          const { data } = await api.get<AuthUser>('/auth/profile')
+          set({ user: data, isAuthenticated: true })
+        } catch {
+          set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false })
+        }
       },
     }),
     {

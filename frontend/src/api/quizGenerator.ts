@@ -24,9 +24,9 @@ export async function getQuizTemplate(courseId: string) {
 export async function generateQuizFromPdf(courseId: string, file: File) {
   const form = new FormData()
   form.append('file', file)
-  const { data } = await api.post(`/quiz-generator/${courseId}/generate`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  // Do NOT set Content-Type manually — axios/browser must add the multipart boundary
+  // or Multer never sees the file and generation returns 400.
+  const { data } = await api.post(`/quiz-generator/${courseId}/generate`, form)
   return data as {
     source: 'ai' | 'fallback'
     courseId: string
@@ -47,8 +47,10 @@ export async function publishQuizQuestions(
     explanation?: string
   }>,
 ) {
-  const { data } = await api.post(`/quiz-generator/${courseId}/publish`, {
-    questions,
-  })
+  const { data } = await api.post(
+    `/quiz-generator/${courseId}/publish`,
+    { questions },
+    { headers: { 'Content-Type': 'application/json' } },
+  )
   return data
 }

@@ -75,6 +75,18 @@
   .btn-press:active {
     transform: translateY(1px);
   }
+
+  .nav-ink::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--color-spark, #d6ff3a);
+    transition: opacity 200ms ease;
+  }
 }
 
 @keyframes fade-rise {

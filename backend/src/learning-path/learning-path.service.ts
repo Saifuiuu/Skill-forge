@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiService } from '../ai/ai.service';
+import { isAiFallback } from '../ai/interfaces/ai-completion.interface';
 import { Course } from '../courses/entities/course.entity';
 import { Enrolment, EnrolmentStatus } from '../enrolments/entities/enrolment.entity';
 import { UsersService } from '../users/users.service';
@@ -24,7 +25,8 @@ interface AiLearningPathPayload {
 const LEARNING_PATH_SYSTEM_PROMPT = `You are SkillForge's corporate learning advisor.
 Recommend a sequenced learning path using ONLY the course IDs provided in the catalogue.
 Rules:
-- Return 5 to 8 courses when enough eligible courses exist; fewer only if the catalogue is smaller.
+- Recommend every useful catalogue course up to a maximum of 8.
+- If the catalogue has fewer than 5 courses, return ALL eligible catalogue courseIds (do not invent extras).
 - Respect prerequisite chains: prerequisites must appear before dependent courses.
 - Prefer courses not yet completed when they support the career goal.
 - Include mandatory courses with upcoming deadlines when relevant.
@@ -40,6 +42,8 @@ Output JSON shape:
 
 @Injectable()
 export class LearningPathService {
+  private readonly logger = new Logger(LearningPathService.name);
+
   constructor(
     private readonly aiService: AiService,
     private readonly usersService: UsersService,
@@ -69,7 +73,7 @@ export class LearningPathService {
       dto.completionHistory ?? this.buildCompletionHistory(enrolments);
 
     const catalogue = await this.loadCatalogue(departmentId);
-    const aiResult = await this.tryAiRecommendation({
+    const aiAttempt = await this.tryAiRecommendation({
       role,
       departmentName,
       careerGoal: dto.careerGoal,
@@ -78,11 +82,11 @@ export class LearningPathService {
       enrolments,
     });
 
-    if (aiResult) {
-      return aiResult;
+    if (aiAttempt.ok) {
+      return aiAttempt.data;
     }
 
-    return this.buildFallbackPath(catalogue);
+    return this.buildFallbackPath(catalogue, aiAttempt.reason);
   }
 
   private buildCompletionHistory(enrolments: Enrolment[]): string {
@@ -121,9 +125,12 @@ export class LearningPathService {
     completionHistory: string;
     catalogue: Course[];
     enrolments: Enrolment[];
-  }): Promise<LearningPathRecommendationDto | null> {
+  }): Promise<
+    | { ok: true; data: LearningPathRecommendationDto }
+    | { ok: false; reason: string }
+  > {
     if (!context.catalogue.length) {
-      return null;
+      return { ok: false, reason: 'No courses available in catalogue' };
     }
 
     const completedIds = new Set(
@@ -158,8 +165,14 @@ ${JSON.stringify(catalogueJson, null, 2)}`;
       { maxTokens: 3000 },
     );
 
+    if (isAiFallback(result)) {
+      this.logger.warn(`Learning path AI fallback from AiService: ${result.reason}`);
+      return { ok: false, reason: result.reason };
+    }
+
     if (!data?.courses?.length) {
-      return null;
+      this.logger.warn('Learning path AI returned empty courses array');
+      return { ok: false, reason: 'AI returned no courses' };
     }
 
     const courseMap = new Map(context.catalogue.map((course) => [course.id, course]));
@@ -169,20 +182,38 @@ ${JSON.stringify(catalogueJson, null, 2)}`;
       .slice(0, 8)
       .map((item) => this.toRecommendedCourse(item, courseMap.get(item.courseId)!));
 
-    if (recommended.length < Math.min(5, context.catalogue.length)) {
-      return null;
+    // Previously required min(5, catalogueSize), which discarded successful Groq
+    // answers whenever the model returned fewer than 5 (common with small catalogues).
+    if (!recommended.length) {
+      this.logger.warn(
+        `Learning path AI returned ${data.courses.length} courseId(s) but none matched the catalogue`,
+      );
+      return {
+        ok: false,
+        reason: 'AI courseIds did not match the available catalogue',
+      };
     }
 
+    this.logger.log(
+      `Learning path AI accepted ${recommended.length}/${context.catalogue.length} catalogue courses`,
+    );
+
     return {
-      source: 'ai',
-      courses: recommended,
-      totalEstimatedTime:
-        data.totalEstimatedTime || this.sumDurations(recommended),
-      summary: data.summary || 'Personalised learning path based on your career goal.',
+      ok: true,
+      data: {
+        source: 'ai',
+        courses: recommended,
+        totalEstimatedTime:
+          data.totalEstimatedTime || this.sumDurations(recommended),
+        summary: data.summary || 'Personalised learning path based on your career goal.',
+      },
     };
   }
 
-  private buildFallbackPath(catalogue: Course[]): LearningPathRecommendationDto {
+  private buildFallbackPath(
+    catalogue: Course[],
+    reason: string,
+  ): LearningPathRecommendationDto {
     const mandatory = catalogue
       .filter((course) => course.isMandatory)
       .sort((a, b) => {
@@ -219,7 +250,7 @@ ${JSON.stringify(catalogueJson, null, 2)}`;
         'Default HR learning path using mandatory courses sorted by upcoming regulatory deadlines.',
       fallbackReason: this.aiService.isDisabled()
         ? 'AI_DISABLED flag is set'
-        : 'AI recommendation unavailable; using HR default sequence',
+        : reason,
     };
   }
 

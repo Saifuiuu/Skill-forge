@@ -73,13 +73,13 @@ export function AppShell() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/app'}
+                end={item.to === '/app' || item.to === '/app/courses'}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `rounded-md px-3 py-2 text-sm transition-colors ${
+                  `nav-ink relative rounded-md px-3 py-2 text-sm transition-colors ${
                     isActive
-                      ? 'bg-arc/20 text-spark'
-                      : 'text-panel/80 hover:bg-white/5 hover:text-panel'
+                      ? 'bg-arc/20 text-spark after:opacity-100'
+                      : 'text-panel/80 hover:bg-white/5 hover:text-panel after:opacity-0'
                   }`
                 }
               >
@@ -90,7 +90,7 @@ export function AppShell() {
 
           <div className="mt-6 border-t border-white/10 pt-4 text-sm">
             <p className="font-medium text-panel">{user?.fullName}</p>
-            <p className="text-arc">{user?.role.replace('_', ' ')}</p>
+            <p className="text-arc">{user?.role.replaceAll('_', ' ')}</p>
             <button
               type="button"
               onClick={onLogout}

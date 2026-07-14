@@ -206,14 +206,53 @@ ${truncatedText}`;
     const type =
       item.type === 'SHORT_ANSWER' ? QuestionType.SHORT_ANSWER : QuestionType.MCQ;
 
+    const options =
+      type === QuestionType.MCQ
+        ? (item.options ?? []).map((option) => option.trim()).filter(Boolean).slice(0, 4)
+        : undefined;
+
+    const correctAnswer = this.resolveCorrectAnswer(
+      options,
+      item.correctAnswer?.trim() ?? '',
+    );
+
     return {
       draftId: randomUUID(),
       type,
       text: item.text.trim(),
-      options: type === QuestionType.MCQ ? item.options ?? [] : undefined,
-      correctAnswer: item.correctAnswer.trim(),
+      options: type === QuestionType.MCQ ? options : undefined,
+      correctAnswer,
       explanation: item.explanation?.trim(),
     };
+  }
+
+  /** Map letter answers (A/B/C/D) or lightly prefixed labels onto option text. */
+  private resolveCorrectAnswer(
+    options: string[] | undefined,
+    correctAnswer: string,
+  ): string {
+    if (!options?.length || !correctAnswer) {
+      return correctAnswer;
+    }
+    if (options.includes(correctAnswer)) {
+      return correctAnswer;
+    }
+
+    const letterMatch = correctAnswer.match(/^([A-Da-d])(?:[).:\-]|\s|$)/);
+    if (letterMatch) {
+      const index = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+      if (options[index]) {
+        return options[index];
+      }
+    }
+
+    const stripped = correctAnswer.replace(/^[A-Da-d][).:\-]\s*/, '').trim();
+    const byStripped = options.find(
+      (option) =>
+        option === stripped ||
+        option.replace(/^[A-Da-d][).:\-]\s*/, '').trim() === stripped,
+    );
+    return byStripped ?? correctAnswer;
   }
 
   private isValidDraft(question: DraftQuestionDto): boolean {
@@ -263,12 +302,18 @@ ${truncatedText}`;
         throw new BadRequestException(`Question ${index + 1} correct answer is required`);
       }
       if (question.type === QuestionType.MCQ) {
-        if (!question.options || question.options.length !== 4) {
+        const options = (question.options ?? []).map((o) => o.trim()).filter(Boolean);
+        if (options.length !== 4) {
           throw new BadRequestException(
             `Question ${index + 1} must have exactly 4 MCQ options`,
           );
         }
-        if (!question.options.includes(question.correctAnswer)) {
+        question.options = options;
+        question.correctAnswer = this.resolveCorrectAnswer(
+          options,
+          question.correctAnswer.trim(),
+        );
+        if (!options.includes(question.correctAnswer)) {
           throw new BadRequestException(
             `Question ${index + 1} correct answer must match one of the MCQ options`,
           );

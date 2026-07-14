@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { listCourses } from '../../api/courses'
 import {
@@ -9,6 +9,32 @@ import {
 } from '../../api/quizGenerator'
 import type { Course } from '../../types/course'
 
+function axiosMessage(err: unknown): string | undefined {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })
+    ?.response?.data?.message
+  if (Array.isArray(msg)) return msg.join(', ')
+  return msg
+}
+
+function normalizeMcq(question: DraftQuestion): DraftQuestion {
+  if (question.type !== 'MCQ') return question
+  const options = [...(question.options ?? ['', '', '', ''])]
+  while (options.length < 4) options.push('')
+  const trimmed = options.slice(0, 4).map((o) => o.trim())
+  let correctAnswer = question.correctAnswer.trim()
+  if (correctAnswer && !trimmed.includes(correctAnswer)) {
+    const letter = correctAnswer.match(/^([A-Da-d])(?:[).:\-]|\s|$)/)
+    if (letter) {
+      const idx = letter[1].toUpperCase().charCodeAt(0) - 65
+      if (trimmed[idx]) correctAnswer = trimmed[idx]
+    }
+  }
+  if (correctAnswer && !trimmed.includes(correctAnswer)) {
+    correctAnswer = ''
+  }
+  return { ...question, options: trimmed, correctAnswer }
+}
+
 export function QuizGeneratorPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [courseId, setCourseId] = useState('')
@@ -18,6 +44,7 @@ export function QuizGeneratorPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const publishErrorRef = useRef<HTMLParagraphElement | null>(null)
 
   useEffect(() => {
     void listCourses().then(setCourses).catch(() => setError('Could not load courses.'))
@@ -27,9 +54,10 @@ export function QuizGeneratorPage() {
     if (!courseId) return
     setBusy(true)
     setError('')
+    setMessage('')
     try {
       const data = await getQuizTemplate(courseId)
-      setQuestions(data.questions)
+      setQuestions(data.questions.map(normalizeMcq))
       setMeta({ source: data.source, reason: data.fallbackReason })
     } catch {
       setError('Template load failed.')
@@ -46,24 +74,32 @@ export function QuizGeneratorPage() {
     }
     setBusy(true)
     setError('')
+    setMessage('')
     try {
       const data = await generateQuizFromPdf(courseId, file)
-      setQuestions(data.questions)
+      setQuestions(data.questions.map(normalizeMcq))
       setMeta({ source: data.source, reason: data.fallbackReason })
       setMessage(
         data.source === 'fallback'
           ? 'Fallback template returned (AI disabled or unavailable). Edit then publish.'
           : 'AI drafts ready for review.',
       )
-    } catch {
-      setError('Generation failed. Try the blank template instead.')
+    } catch (err: unknown) {
+      const detail = axiosMessage(err)
+      setError(
+        detail
+          ? `Generation failed: ${detail}`
+          : 'Generation failed. Try the blank template instead.',
+      )
     } finally {
       setBusy(false)
     }
   }
 
   const updateQuestion = (index: number, patch: Partial<DraftQuestion>) => {
-    setQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, ...patch } : q)))
+    setQuestions((prev) =>
+      prev.map((q, i) => (i === index ? normalizeMcq({ ...q, ...patch }) : q)),
+    )
   }
 
   const discard = (index: number) => {
@@ -71,28 +107,63 @@ export function QuizGeneratorPage() {
   }
 
   const onPublish = async () => {
-    if (!courseId) return
-    const ready = questions.filter((q) => q.text.trim() && q.correctAnswer.trim())
-    if (!ready.length) {
-      setError('Add at least one complete question.')
+    if (!courseId) {
+      setError('Select a course before publishing.')
+      publishErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+
+    const normalized = questions.map(normalizeMcq)
+    setQuestions(normalized)
+
+    const ready = normalized.filter((q) => q.text.trim() && q.correctAnswer.trim())
+    if (!ready.length) {
+      setError('Add at least one complete question (text + correct answer).')
+      publishErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
+    for (let i = 0; i < ready.length; i++) {
+      const q = ready[i]
+      if (q.type !== 'MCQ') continue
+      const options = q.options ?? []
+      if (options.length !== 4 || options.some((o) => !o.trim())) {
+        setError(`Question ${i + 1}: MCQ needs exactly 4 non-empty options.`)
+        publishErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        return
+      }
+      if (!options.includes(q.correctAnswer)) {
+        setError(
+          `Question ${i + 1}: correct answer must match one option exactly. Use the answer dropdown.`,
+        )
+        publishErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        return
+      }
+    }
+
     setBusy(true)
     setError('')
+    setMessage('')
     try {
       await publishQuizQuestions(
         courseId,
         ready.map((q) => ({
           type: q.type,
-          text: q.text,
+          text: q.text.trim(),
           options: q.type === 'MCQ' ? q.options : undefined,
-          correctAnswer: q.correctAnswer,
-          explanation: q.explanation,
+          correctAnswer: q.correctAnswer.trim(),
+          explanation: q.explanation?.trim() || undefined,
         })),
       )
       setMessage(`Published ${ready.length} question(s) to the course quiz.`)
-    } catch {
-      setError('Publish failed. Check MCQ has 4 options matching the correct answer.')
+    } catch (err: unknown) {
+      const detail = axiosMessage(err)
+      setError(
+        detail
+          ? `Publish failed: ${detail}`
+          : 'Publish failed. Check each MCQ has 4 options and the correct answer matches one option.',
+      )
+      publishErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } finally {
       setBusy(false)
     }
@@ -151,7 +222,11 @@ export function QuizGeneratorPage() {
       </form>
 
       {message && <p className="mt-4 text-sm text-ok">{message}</p>}
-      {error && <p className="mt-4 text-sm text-alert">{error}</p>}
+      {error && (
+        <p ref={publishErrorRef} className="mt-4 text-sm text-alert">
+          {error}
+        </p>
+      )}
       {meta && (
         <p className="mt-2 text-xs uppercase tracking-wide text-arc-deep">
           Source: {meta.source}
@@ -201,7 +276,12 @@ export function QuizGeneratorPage() {
                     onChange={(e) => {
                       const options = [...(q.options ?? ['', '', '', ''])]
                       options[oi] = e.target.value
-                      updateQuestion(index, { options })
+                      const nextCorrect =
+                        q.correctAnswer === opt ? e.target.value : q.correctAnswer
+                      updateQuestion(index, {
+                        options,
+                        correctAnswer: nextCorrect,
+                      })
                     }}
                     placeholder={`Option ${oi + 1}`}
                     className="rounded-md border border-line bg-panel px-3 py-2 text-sm"
@@ -209,12 +289,34 @@ export function QuizGeneratorPage() {
                 ))}
               </div>
             )}
-            <input
-              value={q.correctAnswer}
-              onChange={(e) => updateQuestion(index, { correctAnswer: e.target.value })}
-              placeholder="Correct answer"
-              className="mt-2 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm"
-            />
+            {q.type === 'MCQ' ? (
+              <label className="mt-2 block text-sm">
+                Correct answer
+                <select
+                  value={
+                    (q.options ?? []).includes(q.correctAnswer) ? q.correctAnswer : ''
+                  }
+                  onChange={(e) => updateQuestion(index, { correctAnswer: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm"
+                >
+                  <option value="">Select the matching option…</option>
+                  {(q.options ?? [])
+                    .filter((o) => o.trim())
+                    .map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : (
+              <input
+                value={q.correctAnswer}
+                onChange={(e) => updateQuestion(index, { correctAnswer: e.target.value })}
+                placeholder="Correct answer"
+                className="mt-2 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm"
+              />
+            )}
             <input
               value={q.explanation ?? ''}
               onChange={(e) => updateQuestion(index, { explanation: e.target.value })}
@@ -226,14 +328,21 @@ export function QuizGeneratorPage() {
       </ul>
 
       {questions.length > 0 && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void onPublish()}
-          className="btn-press mt-4 rounded-md bg-arc px-4 py-2.5 text-sm font-medium text-ink"
-        >
-          Publish reviewed questions
-        </button>
+        <div className="mt-4 space-y-2">
+          {error && (
+            <p className="text-sm text-alert" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={busy || !courseId}
+            onClick={() => void onPublish()}
+            className="btn-press rounded-md bg-arc px-4 py-2.5 text-sm font-medium text-ink disabled:opacity-60"
+          >
+            {busy ? 'Publishing…' : 'Publish reviewed questions'}
+          </button>
+        </div>
       )}
     </section>
   )

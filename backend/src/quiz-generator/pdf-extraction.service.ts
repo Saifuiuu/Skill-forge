@@ -1,6 +1,11 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{ text?: string }>;
+const { PDFParse } = require('pdf-parse') as {
+  PDFParse: new (options: { data: Buffer | Uint8Array }) => {
+    getText: () => Promise<{ text?: string }>;
+    destroy: () => Promise<void>;
+  };
+};
 
 @Injectable()
 export class PdfExtractionService {
@@ -9,11 +14,14 @@ export class PdfExtractionService {
       throw new BadRequestException('PDF file is empty');
     }
 
+    const parser = new PDFParse({ data: buffer });
     try {
-      const result = await pdfParse(buffer);
+      const result = await parser.getText();
       const text = result.text?.replace(/\s+/g, ' ').trim();
       if (!text) {
-        throw new BadRequestException('No readable text found in the PDF');
+        throw new BadRequestException(
+          'No readable text found in the PDF (scanned/image-only PDFs are not supported)',
+        );
       }
       return text;
     } catch (error) {
@@ -21,6 +29,8 @@ export class PdfExtractionService {
         throw error;
       }
       throw new BadRequestException('Failed to parse PDF file');
+    } finally {
+      await parser.destroy().catch(() => undefined);
     }
   }
 }

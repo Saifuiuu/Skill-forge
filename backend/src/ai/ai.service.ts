@@ -2,14 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AiCompletionOptions,
-  AiCompletionResult,
-  AiFallbackResult,
   AiResult,
   isAiFallback,
 } from './interfaces/ai-completion.interface';
 
-const DEFAULT_MODEL = 'claude-sonnet-5';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+// -------------------------
+// GROQ CONFIG
+// -------------------------
+const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// -------------------------
+// ANTHROPIC CONFIG (COMMENTED)
+// -------------------------
+// const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+// const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
 @Injectable()
 export class AiService {
@@ -23,7 +30,8 @@ export class AiService {
   }
 
   private getApiKey(): string | null {
-    return this.configService.get<string>('ANTHROPIC_API_KEY') ?? null;
+    const key = this.configService.get<string>('GROQ_API_KEY') ?? null;
+    return key?.trim() ? key.trim() : null;
   }
 
   async complete(
@@ -36,58 +44,88 @@ export class AiService {
     }
 
     const apiKey = this.getApiKey();
+
     if (!apiKey) {
-      return { usedFallback: true, reason: 'ANTHROPIC_API_KEY is not configured' };
+      return {
+        usedFallback: true,
+        reason: 'GROQ_API_KEY is not configured',
+      };
     }
 
     const model = options.model ?? DEFAULT_MODEL;
     const maxTokens = options.maxTokens ?? 2048;
 
+    const requestPayload = {
+      model,
+      messages: [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: userPrompt },
+      ],
+      temperature: options.temperature ?? 0.3,
+      max_tokens: maxTokens,
+    };
+
+    this.logger.log(
+      `Groq request model=${model} max_tokens=${maxTokens} ` +
+        `systemChars=${systemPrompt.length} userChars=${userPrompt.length}`,
+    );
+
     try {
-      const response = await fetch(ANTHROPIC_API_URL, {
+      const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          temperature: options.temperature ?? 0.3,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (!response.ok) {
         const body = await response.text();
-        this.logger.warn(`Anthropic API error ${response.status}: ${body}`);
+        this.logger.warn(`Groq API error ${response.status}: ${body.slice(0, 800)}`);
         return {
           usedFallback: true,
-          reason: `Anthropic API returned ${response.status}`,
+          reason: `Groq API returned ${response.status}`,
         };
       }
 
       const data = (await response.json()) as {
-        content?: Array<{ type: string; text?: string }>;
+        choices?: Array<{
+          message?: {
+            content?: string;
+          };
+        }>;
+        usage?: { total_tokens?: number };
       };
 
-      const text = data.content
-        ?.filter((block) => block.type === 'text')
-        .map((block) => block.text ?? '')
-        .join('')
-        .trim();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      this.logger.log(
+        `Groq response tokens=${data.usage?.total_tokens ?? 'n/a'} ` +
+          `contentChars=${text?.length ?? 0} preview=${JSON.stringify((text ?? '').slice(0, 240))}`,
+      );
 
       if (!text) {
-        return { usedFallback: true, reason: 'Empty response from Anthropic API' };
+        return {
+          usedFallback: true,
+          reason: 'Empty response from GROQ API',
+        };
       }
 
-      return { text, model, usedFallback: false };
+      return {
+        text,
+        model,
+        usedFallback: false,
+      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(`Anthropic API call failed: ${message}`);
-      return { usedFallback: true, reason: message };
+      const message =
+        error instanceof Error ? error.message : 'Unknown error';
+
+      this.logger.warn(`Groq API call failed: ${message}`);
+
+      return {
+        usedFallback: true,
+        reason: message,
+      };
     }
   }
 
@@ -96,31 +134,55 @@ export class AiService {
     userPrompt: string,
     options: AiCompletionOptions = {},
   ): Promise<{ data: T | null; result: AiResult }> {
-    const jsonSystemPrompt = `${systemPrompt}\n\nRespond with valid JSON only. No markdown fences or extra commentary.`;
-    const result = await this.complete(jsonSystemPrompt, userPrompt, options);
+    const jsonSystemPrompt = `${systemPrompt}
+
+Respond with valid JSON only. No markdown fences or extra commentary.`;
+
+    const result = await this.complete(
+      jsonSystemPrompt,
+      userPrompt,
+      options,
+    );
 
     if (isAiFallback(result)) {
-      return { data: null, result };
+      return {
+        data: null,
+        result,
+      };
     }
 
     try {
       const parsed = JSON.parse(this.extractJson(result.text)) as T;
-      return { data: parsed, result };
+
+      return {
+        data: parsed,
+        result,
+      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'JSON parse error';
-      this.logger.warn(`Failed to parse AI JSON response: ${message}`);
+      const message =
+        error instanceof Error ? error.message : 'JSON parse error';
+
+      this.logger.warn(
+        `Failed to parse AI JSON response: ${message}`,
+      );
+
       return {
         data: null,
-        result: { usedFallback: true, reason: `Invalid JSON from AI: ${message}` },
+        result: {
+          usedFallback: true,
+          reason: `Invalid JSON from AI: ${message}`,
+        },
       };
     }
   }
 
   private extractJson(text: string): string {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+
     if (fenced?.[1]) {
       return fenced[1].trim();
     }
+
     return text.trim();
   }
 }

@@ -38,16 +38,27 @@ export function RegisterPage() {
         className="absolute inset-0 bg-ink"
         style={{
           backgroundImage:
-            'radial-gradient(circle at 70% 15%, rgba(46,196,182,0.26), transparent 38%), linear-gradient(160deg, #07161C 0%, #12343C 100%)',
+            'radial-gradient(circle at 70% 15%, rgba(46,196,182,0.26), transparent 38%), radial-gradient(circle at 20% 80%, rgba(214,255,58,0.12), transparent 35%), linear-gradient(160deg, #07161C 0%, #12343C 100%)',
         }}
       />
-      <div className="relative mx-auto flex min-h-svh max-w-lg items-center px-6 py-12">
+      <div className="relative mx-auto grid min-h-svh max-w-6xl items-center gap-10 px-6 py-12 lg:grid-cols-2">
+        <div className="fade-rise text-panel">
+          <p className="font-display text-5xl leading-none tracking-tight text-spark md:text-6xl">
+            SkillForge
+          </p>
+          <h1 className="mt-6 max-w-md font-display text-3xl text-panel md:text-4xl">
+            Join your organisation’s learning forge.
+          </h1>
+          <p className="mt-4 max-w-md text-base text-panel/75">
+            Create an employee account to enrol in courses, take quizzes, and earn certificates.
+          </p>
+        </div>
+
         <form
           onSubmit={onSubmit}
-          className="fade-rise w-full rounded-2xl border border-line/40 bg-panel p-8"
+          className="fade-rise w-full max-w-md justify-self-end rounded-2xl border border-line/40 bg-panel p-8 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
         >
-          <p className="font-display text-3xl text-ink">SkillForge</p>
-          <h1 className="mt-3 font-display text-2xl text-ink">Create your account</h1>
+          <h2 className="font-display text-2xl text-ink">Create account</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Registers as an employee. Managers and admins are provisioned by HR.
           </p>
@@ -90,7 +101,7 @@ export function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn-press mt-6 w-full rounded-md bg-arc px-4 py-3 font-medium text-ink transition hover:bg-arc-deep hover:text-panel disabled:opacity-60"
+            className="btn-press mt-6 w-full rounded-md bg-ink px-4 py-3 font-medium text-spark transition hover:bg-ink/90 disabled:opacity-60"
           >
             {loading ? 'Creating…' : 'Create account'}
           </button>

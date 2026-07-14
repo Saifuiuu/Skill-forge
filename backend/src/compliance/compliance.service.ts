@@ -145,8 +145,8 @@ export class ComplianceService {
     ];
 
     for (const department of departments) {
-      const employees = department.teams.flatMap((t) =>
-        t.members.filter((m) => m.role !== UserRole.MANAGER),
+      const employees = (department.teams ?? []).flatMap((t) =>
+        (t.members ?? []).filter((m) => m.role !== UserRole.MANAGER),
       );
       const mandatoryCourses = await this.getMandatoryCoursesForDepartment(department.id);
 
@@ -154,12 +154,26 @@ export class ComplianceService {
         for (const course of mandatoryCourses) {
           const enrolment = await this.getEnrolment(employee.id, course.id);
           const status = enrolment?.status ?? 'NOT_ENROLLED';
-          const risk = calculateRisk(course.regulatoryDeadline, status === EnrolmentStatus.PASSED);
-          const deadline = course.regulatoryDeadline
-            ? course.regulatoryDeadline.toISOString().split('T')[0]
-            : '';
+          const risk = calculateRisk(
+            course.regulatoryDeadline ?? null,
+            status === EnrolmentStatus.PASSED,
+          );
+          let deadline = '';
+          if (course.regulatoryDeadline) {
+            const parsed = new Date(course.regulatoryDeadline);
+            if (!Number.isNaN(parsed.getTime())) {
+              deadline = parsed.toISOString().split('T')[0];
+            }
+          }
           rows.push(
-            [department.name, employee.fullName, course.title, status, deadline, risk]
+            [
+              department.name ?? '',
+              employee.fullName ?? '',
+              course.title ?? '',
+              status,
+              deadline,
+              risk,
+            ]
               .map((v) => `"${String(v).replace(/"/g, '""')}"`)
               .join(','),
           );

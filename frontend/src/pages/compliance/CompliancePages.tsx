@@ -61,7 +61,11 @@ export function TeamCompliancePage() {
     <section className="fade-rise">
       <h1 className="font-display text-3xl text-ink">Team compliance</h1>
       <p className="mt-1 text-ink-soft">
-        {data ? `${data.teamName} · ${data.teamSize} employees` : 'Loading…'}
+        {error
+          ? 'Unable to load team details.'
+          : data
+            ? `${data.teamName} · ${data.teamSize} employees`
+            : 'Loading…'}
       </p>
       {error && <p className="mt-3 text-sm text-alert">{error}</p>}
 
