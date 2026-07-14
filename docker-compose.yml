@@ -1,0 +1,51 @@
+# SkillForge — Docker Compose
+# Database: Neon (cloud) — NOT containerized.
+# Secrets: loaded from backend/.env via env_file (never hardcoded).
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skillforge-backend
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Ensure container listens correctly; CORS for local/frontend container
+      PORT: "3000"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:5173}"
+    volumes:
+      # Persist generated certificate PDFs outside the container
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "${VITE_API_URL:-http://localhost:3000}"
+    container_name: skillforge-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend_uploads:

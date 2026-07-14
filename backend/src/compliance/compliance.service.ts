@@ -11,7 +11,8 @@ type RiskLevel = 'green' | 'amber' | 'red';
 function calculateRisk(deadline: Date | null, isCompleted: boolean): RiskLevel {
   if (isCompleted) return 'green';
   if (!deadline) return 'green';
-  const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const deadlineDate = deadline instanceof Date ? deadline : new Date(deadline);
+  const daysLeft = Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (daysLeft <= 0) return 'red';
   if (daysLeft <= 14) return 'amber';
   return 'green';
