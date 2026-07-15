@@ -8,7 +8,7 @@ import { Department } from '../../departments/entities/department.entity';
 import { Team } from '../../teams/entities/team.entity';
 import { User, UserRole } from '../../users/entities/user.entity';
 
-dotenv.config({ path: join(__dirname, '../../.env') });
+dotenv.config({ path: join(__dirname, '../../../.env') });
 
 const DEPARTMENTS = [
   'Finance & Accounting',
@@ -49,9 +49,14 @@ const DEMO_USERS = [
 const DEMO_PASSWORD = 'DemoPass123!';
 
 async function seed() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is not set in .env');
+  }
+
   const dataSource = new DataSource({
     type: 'postgres',
-    url: process.env.DATABASE_URL,
+    url: databaseUrl,
     entities: [Company, Department, Team, User],
     ssl: true,
     extra: { ssl: { rejectUnauthorized: false } },

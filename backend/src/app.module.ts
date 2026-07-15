@@ -1,21 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { Certificate } from './certificates/entities/certificate.entity';
 import { CertificatesModule } from './certificates/certificates.module';
-
-
-
-import { Company } from './companies/entities/company.entity';
-import { Department } from './departments/entities/department.entity';
-import { Team } from './teams/entities/team.entity';
-import { User } from './users/entities/user.entity';
-import { Course } from './courses/entities/course.entity';
-import { Enrolment } from './enrolments/entities/enrolment.entity';
-import { Quiz } from './quizzes/entities/quiz.entity';
-import { Question } from './questions/entities/question.entity';
+import { buildDatabaseOptions } from './database/database.config';
 
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
@@ -29,32 +18,25 @@ import { AuthModule } from './auth/auth.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ComplianceModule } from './compliance/compliance.module';
+import { LearningPathModule } from './learning-path/learning-path.module';
+import { QuizGeneratorModule } from './quiz-generator/quiz-generator.module';
+import { SkillGapModule } from './skill-gap/skill-gap.module';
+import { ComplianceAlerterModule } from './compliance-alerter/compliance-alerter.module';
 
 
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: process.env.DATABASE_URL,
-      entities: [
-        User,
-        Company,
-        Department,
-        Team,
-        Enrolment,
-        Course,
-        Quiz,
-        Question,
-        Certificate,
-      ],
-      synchronize: true,
-      migrationsRun: true,
-      migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-      ssl: true,
-      extra: {
-        ssl: { rejectUnauthorized: false },
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        if (!databaseUrl) {
+          throw new Error('DATABASE_URL is not set in .env');
+        }
+        return buildDatabaseOptions(databaseUrl);
       },
     }),
     AuthModule,
@@ -68,6 +50,10 @@ import { ComplianceModule } from './compliance/compliance.module';
     QuestionsModule,
     CertificatesModule,
     ComplianceModule,
+    LearningPathModule,
+    QuizGeneratorModule,
+    SkillGapModule,
+    ComplianceAlerterModule,
   ],
   controllers: [AppController],
   providers: [AppService],
